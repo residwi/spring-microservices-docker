@@ -1,0 +1,103 @@
+version: "3"
+
+services:
+  db_product:
+    image: postgres:alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: product_service
+    volumes:
+      - db-product-data:/var/lib/postgresql/data
+
+  db_member:
+    image: mysql:latest
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=member_service
+    volumes:
+      - db-member-data:/var/lib/mysql
+
+  db_auth:
+    image: mysql:latest
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=auth_service
+    volumes:
+      - db-auth-data:/var/lib/mysql
+
+  discovery:
+    image: residwi/spring-microservice-docker-service-discovery:0.0.1-SNAPSHOT
+    ports:
+      - 8761:8761
+    restart: unless-stopped
+
+  config-server:
+    image: residwi/spring-microservice-docker-config-server:0.0.1-SNAPSHOT
+    restart: on-failure
+    environment:
+      - JAVA_OPTS=
+        -DEUREKA_SERVER=http://discovery:8761/eureka
+    depends_on:
+      - discovery
+
+  api-gateway:
+    image: residwi/spring-microservice-docker-api-gateway:0.0.1-SNAPSHOT
+    restart: on-failure
+    ports:
+      - 8888:8888
+    environment:
+      - JAVA_OPTS=
+        -DEUREKA_SERVER=http://discovery:8761/eureka
+    depends_on:
+      - discovery
+
+  product:
+    image: residwi/spring-microservice-docker-product:0.0.1-SNAPSHOT
+    restart: on-failure
+    environment:
+      - JAVA_OPTS=
+        -DDATABASE_URL=jdbc:postgresql://db_product:5432/product_service?serverTimezone=UTC
+        -DDATABASE_USERNAME=postgres
+        -DDATABASE_PASSWORD=secret
+        -DEUREKA_SERVER=http://discovery:8761/eureka
+    depends_on:
+      - discovery
+      - db_product
+
+  auth:
+    image: residwi/spring-microservice-docker-auth:0.0.1-SNAPSHOT
+    restart: on-failure
+    environment:
+      - JAVA_OPTS=
+        -DDATABASE_URL=jdbc:mysql://db_auth:3306/auth_service?serverTimezone=UTC
+        -DDATABASE_USERNAME=root
+        -DDATABASE_PASSWORD=root
+        -DEUREKA_SERVER=http://discovery:8761/eureka
+    depends_on:
+      - discovery
+      - db_auth
+
+  member:
+    image: residwi/spring-microservice-docker-member:0.0.1-SNAPSHOT
+    restart: on-failure
+    environment:
+      - JAVA_OPTS=
+        -DDATABASE_URL=jdbc:mysql://db_member:3306/member_service?serverTimezone=UTC
+        -DDATABASE_USERNAME=root
+        -DDATABASE_PASSWORD=root
+        -DEUREKA_SERVER=http://discovery:8761/eureka
+    depends_on:
+      - discovery
+      - db_member
+
+volumes:
+  db-product-data:
+    driver: local
+  db-auth-data:
+    driver: local
+  db-member-data:
+    driver: local
